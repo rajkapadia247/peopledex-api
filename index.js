@@ -7,9 +7,27 @@ const app = express();
 const PORT = 8080;
 
 const cors = require("cors");
-app.use(cors());
+
+const corsOptions = {
+  origin: [
+    "https://peopledex.space",
+    "https://www.peopledex.space",
+    "http://localhost:5173",
+  ],
+  credentials: true,
+  optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
 
 app.use(express.json());
+
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "healthy",
+  });
+});
+
 app.use("/api/auth", require("./routes/auth"));
 
 mongoose
