@@ -1,31 +1,33 @@
 const express = require("express");
 const router = express.Router();
 const User = require("../models/User");
-const { OAuth2Client } = require("google-auth-library");
 const { hashPassword, comparePassword } = require("../utils/hash");
 const { makeToken, verifyToken } = require("../utils/jwt");
 
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-
-router.post("/auth/google/verify", async (req, res) => {
+router.post("/google/verify", async (req, res) => {
   try {
-    const { idToken, nonce } = req.body;
-    const ticket = await client.verifyIdToken({
-      idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-    const payload = ticket.getPayload();
-    console.log(payload);
-    if (!payload || !payload.email || !payload.email_verified) {
-      return res.status(401).json({ error: "Invalid Google token" });
+    const { access_token, nonce } = req.body;
+    const userInfoResponse = await fetch(
+      "https://www.googleapis.com/oauth2/v2/userinfo",
+      {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+        },
+      }
+    );
+
+    if (!userInfoResponse.ok) {
+      return res.status(401).json({ message: "Invalid access token" });
     }
-    let user = await User.findOne({ email: payload.email });
+
+    const userInfo = await userInfoResponse.json();
+    let user = await User.findOne({ email: userInfo.email });
     if (!user) {
       console.log("Creating user");
       user = await User.create({
-        name: payload.name,
-        email: payload.email?.toLowerCase(),
-        picture: payload.picture,
+        name: userInfo.name,
+        email: userInfo.email?.toLowerCase(),
+        picture: userInfo.picture,
       });
       const token = makeToken({ id: user._id });
       res.status(201).json({
@@ -63,7 +65,7 @@ router.post("/auth/google/verify", async (req, res) => {
 });
 
 // POST /api/register
-router.post("/auth/register", async (req, res) => {
+router.post("/register", async (req, res) => {
   try {
     const { name, email, password } = req.body;
     const exists = await User.findOne({ email });
@@ -83,7 +85,7 @@ router.post("/auth/register", async (req, res) => {
 });
 
 // POST /api/login
-router.post("/auth/login", async (req, res) => {
+router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
@@ -107,7 +109,7 @@ router.post("/auth/login", async (req, res) => {
   }
 });
 
-router.get("/auth/me", async (req, res) => {
+router.get("/me", async (req, res) => {
   try {
     const decodedToken = verifyToken(req.headers.authorization.split(" ")[1]);
     const user = await User.findOne({ _id: decodedToken.id });

@@ -1,8 +1,10 @@
 const express = require("express");
-const router = express.Router();
 const Contact = require("../models/Contact");
+const { getColorByName } = require("../utils");
 
-router.get("", async (req, res) => {
+const router = express.Router();
+
+router.get("/", async (req, res) => {
   const { searchTerm = "", filterFavoritesOnly = "false" } = req.query;
   const query = { userId: req.user.id };
 
@@ -19,6 +21,7 @@ router.get("", async (req, res) => {
 
   try {
     const data = await Contact.find(query)
+      .collation({ locale: "en", strength: 2 })
       .sort({ name: 1 })
       .limit(20)
       .lean()
@@ -31,13 +34,17 @@ router.get("", async (req, res) => {
         company: 1,
         favorite: 1,
       });
-    res.send({ data });
+    const processedData = data.map((contact) => {
+      contact.color = getColorByName(contact.name);
+      return contact;
+    });
+    res.send({ data: processedData });
   } catch (e) {
     res.status(500).send({ message: e.message });
   }
 });
 
-router.delete("", async (req, res) => {
+router.delete("/", async (req, res) => {
   const { id } = req.body;
   try {
     const deleted = await Contact.findOneAndDelete({
@@ -51,7 +58,7 @@ router.delete("", async (req, res) => {
   }
 });
 
-router.post("", async (req, res) => {
+router.post("/", async (req, res) => {
   try {
     const contact = await Contact.create({ ...req.body, userId: req.user.id });
     res.status(200).send({ message: "Contact added", data: contact });
@@ -73,16 +80,13 @@ router.patch("/favorite", async (req, res) => {
   }
 });
 
-router.put("", async (req, res) => {
+router.put("/", async (req, res) => {
   const { id, ...fields } = req.body;
   try {
     const updated = await Contact.findOneAndUpdate(
       { _id: id, userId: req.user.id },
       fields,
-      {
-        new: true,
-        runValidators: true,
-      }
+      { new: true, runValidators: true }
     );
     if (!updated) return res.status(404).send({ message: "Not found" });
     res.send({ message: "Updated", data: updated });
@@ -90,3 +94,5 @@ router.put("", async (req, res) => {
     res.status(400).send({ message: e.message });
   }
 });
+
+module.exports = router;
